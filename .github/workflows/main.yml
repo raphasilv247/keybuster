@@ -1,0 +1,53 @@
+name: Build keybuster (NDK)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download NDK r21e
+        run: |
+          wget -q https://dl.google.com/android/repository/android-ndk-r21e-linux-x86_64.zip
+          unzip -q android-ndk-r21e-linux-x86_64.zip
+          mv android-ndk-r21e "$HOME/android-ndk-r21"
+
+      - name: Add armeabi-v7a to Application.mk
+        run: |
+          # Garante que o build gere tanto arm64-v8a quanto armeabi-v7a
+          if grep -q "^APP_ABI" jni/Application.mk; then
+            sed -i 's/^APP_ABI.*/APP_ABI := arm64-v8a armeabi-v7a/' jni/Application.mk
+          else
+            echo "APP_ABI := arm64-v8a armeabi-v7a" >> jni/Application.mk
+          fi
+          cat jni/Application.mk
+
+      - name: Patch build.sh to use downloaded NDK
+        run: |
+          sed -i "s|~/android-ndk-r21|$HOME/android-ndk-r21|g" build.sh
+          chmod +x build.sh
+          cat build.sh
+
+      - name: Run build.sh
+        run: bash ./build.sh
+
+      - name: Show resulting binaries
+        run: |
+          echo "=== libs/ ==="
+          find libs -type f 2>/dev/null || echo "pasta libs/ não encontrada"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: keybuster-libs
+          path: libs/
+          if-no-files-found: warn
